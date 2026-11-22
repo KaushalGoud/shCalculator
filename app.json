@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "Shree's Calculator",
+    "slug": "shrees-calculator",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "androidStatusBar": {
+      "backgroundColor": "#fde6ec",
+      "barStyle": "dark-content"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#fde6ec",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "short_name": "Shree's Calc",
+      "description": "A simple pink calculator.",
+      "theme_color": "#fde6ec",
+      "background_color": "#fde6ec",
+      "display": "standalone",
+      "orientation": "portrait",
+      "scope": "/"
+    },
+    "plugins": [
+      "expo-font"
+    ]
+  }
+}
