@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Calculator</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#e3e9ed; --panel:#f6f8f9; --key:#ffffff; --ink:#1b2831; --muted:#6a7c88;
+  --op:#d3e5ea; --op-ink:#0e5766; --eq:#0e5766; --eq-ink:#ffffff;
+  --ac:#f5dbd5; --ac-ink:#a3341f; --fn:#e4e9ed; --shadow:#c4cfd6;
+  color-scheme: light;
+  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#10161a; --panel:#182027; --key:#243039; --ink:#e8eff3; --muted:#8fa3af;
+    --op:#1f3b42; --op-ink:#7fd0dd; --eq:#46b5c6; --eq-ink:#082329;
+    --ac:#3d2621; --ac-ink:#ff9d8b; --fn:#2c3943; --shadow:#0a0e11; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#10161a; --panel:#182027; --key:#243039; --ink:#e8eff3; --muted:#8fa3af;
+  --op:#1f3b42; --op-ink:#7fd0dd; --eq:#46b5c6; --eq-ink:#082329;
+  --ac:#3d2621; --ac-ink:#ff9d8b; --fn:#2c3943; --shadow:#0a0e11; color-scheme: dark;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font-family:"Outfit",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  display:flex;align-items:center;justify-content:center;padding:16px}
+.calc{width:100%;max-width:360px;background:var(--panel);border-radius:28px;padding:18px;
+  box-shadow:0 1px 0 var(--shadow),0 18px 40px -18px var(--shadow)}
+.screen{min-height:116px;display:flex;flex-direction:column;justify-content:flex-end;align-items:flex-end;
+  padding:8px 10px 14px;overflow:hidden;text-align:right}
+.hint{height:24px;color:var(--muted);font-size:1.05rem;font-weight:300;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.main{font-size:3.2rem;font-weight:300;line-height:1.1;letter-spacing:-.02em;max-width:100%;overflow-wrap:anywhere;word-break:break-all}
+.main.sm{font-size:2.3rem}.main.xs{font-size:1.6rem}
+.main .o{color:var(--op-ink);margin:0 .14em;font-weight:400}
+.pad{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+button{font:inherit;font-size:1.5rem;font-weight:400;height:68px;border:0;border-radius:20px;background:var(--key);color:var(--ink);
+  cursor:pointer;box-shadow:0 2px 0 var(--shadow);transition:transform .08s,filter .12s;-webkit-tap-highlight-color:transparent}
+button:hover{filter:brightness(.97)}
+button:active{transform:translateY(2px) scale(.97);box-shadow:none}
+button:focus-visible{outline:3px solid var(--op-ink);outline-offset:2px}
+.fn{background:var(--fn)} .op{background:var(--op);color:var(--op-ink);font-weight:500}
+.ac{background:var(--ac);color:var(--ac-ink);font-weight:500}
+.eq{background:var(--eq);color:var(--eq-ink);font-weight:500}
+@media (max-width:360px){button{height:60px;font-size:1.3rem}.main{font-size:2.7rem}}
+@media (prefers-reduced-motion:reduce){button{transition:none}}
+</style>
+</head>
+<body>
+<main class="calc">
+  <div class="screen" aria-live="polite">
+    <div class="hint" id="hint"></div>
+    <div class="main" id="main">0</div>
+  </div>
+  <div class="pad" id="pad">
+    <button class="ac" data-k="AC" aria-label="All clear">AC</button>
+    <button class="fn" data-k="BS" aria-label="Backspace">&#9003;</button>
+    <button class="fn" data-k="%" aria-label="Percent">%</button>
+    <button class="op" data-k="÷" aria-label="Divide">÷</button>
+    <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>
+    <button class="op" data-k="×" aria-label="Multiply">×</button>
+    <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button>
+    <button class="op" data-k="-" aria-label="Subtract">−</button>
+    <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button>
+    <button class="op" data-k="+" aria-label="Add">+</button>
+    <button class="fn" data-k="NEG" aria-label="Toggle sign">±</button>
+    <button data-k="0">0</button><button data-k=".">.</button>
+    <button class="eq" data-k="=" aria-label="Equals">=</button>
+  </div>
+</main>
+<script>
+(function(){
+  var expr='', done=false, err=false, hintText='';
+  var main=document.getElementById('main'), hint=document.getElementById('hint');
+  var OPS=/[+\-×÷]/;
+
+  function calc(s){
+    var i=0;
+    function num(){
+      var m=s.slice(i).match(/^(\d+\.?\d*|\.\d+)/);
+      if(!m) throw 'bad';
+      i+=m[0].length; var v=parseFloat(m[0]);
+      while(s[i]==='%'){v/=100;i++}
+      return v;
+    }
+    function un(){ if(s[i]==='-'){i++;return -un();} return num(); }
+    function term(){
+      var v=un();
+      while(s[i]==='×'||s[i]==='÷'){
+        var o=s[i++], r=un();
+        if(o==='×') v*=r; else { if(r===0) throw 'div'; v/=r; }
+      }
+      return v;
+    }
+    function ex(){
+      var v=term();
+      while(s[i]==='+'||s[i]==='-'){
+        var o=s[i++], r=term();
+        v = o==='+' ? v+r : v-r;
+      }
+      return v;
+    }
+    var v=ex(); if(i<s.length) throw 'bad'; return v;
+  }
+  function fmt(v){ return String(parseFloat(v.toPrecision(12))); }
+  function clean(s){ return s.replace(/[+\-×÷.]+$/,''); }
+  function seg(){ return expr.match(/[\d.]*$/)[0]; }
+
+  function evaluate(){
+    var s=clean(expr);
+    if(!s) return;
+    try{
+      var r=calc(s);
+      hintText=s.replace(/-/g,'−')+' =';
+      expr=fmt(r); done=true;
+    }catch(e){
+      err=true; done=false;
+      hintText = e==='div' ? 'Can’t divide by zero' : 'Check the expression';
+    }
+  }
+  function toggleSign(){
+    var m=expr.match(/[\d.]+$/); if(!m) return;
+    var i=expr.length-m[0].length, prev=expr[i-1];
+    if(prev==='-' && (i-1===0 || OPS.test(expr[i-2]))) expr=expr.slice(0,i-1)+expr.slice(i);
+    else expr=expr.slice(0,i)+'-'+expr.slice(i);
+  }
+
+  function press(k){
+    if(err){ expr=''; err=false; done=false; hintText=''; if(!/^[\d.]$/.test(k)&&k!=='-') { render(); if(k==='AC'||k==='BS') return; } }
+    if(k==='AC'){ expr=''; done=false; hintText=''; }
+    else if(k==='BS'){ if(done){ expr=''; done=false; hintText=''; } else expr=expr.slice(0,-1); }
+    else if(k==='='){ evaluate(); }
+    else if(k==='NEG'){ toggleSign(); }
+    else if(k==='%'){ if(/[\d%]$/.test(expr)){ expr+='%'; done=false; } }
+    else if(/^\d$/.test(k)){
+      if(done){ expr=''; done=false; hintText=''; }
+      if(seg()==='0') expr=expr.slice(0,-1);
+      if(expr.slice(-1)==='%') expr+='×';
+      expr+=k;
+    }
+    else if(k==='.'){
+      if(done){ expr=''; done=false; hintText=''; }
+      var s=seg(); if(s.indexOf('.')>-1) return;
+      if(s===''){ if(expr.slice(-1)==='%') expr+='×'; expr+='0.'; } else expr+='.';
+    }
+    else { // operator
+      done=false; hintText='';
+      if(expr===''){ if(k==='-') expr='-'; }
+      else if(OPS.test(expr.slice(-1))){ if(expr!=='-') expr=expr.slice(0,-1)+k; }
+      else expr+=k;
+    }
+    render();
+  }
+
+  function render(){
+    var shown=expr||'0';
+    if(err) shown='Error';
+    main.innerHTML=shown.replace(/([+\-×÷])/g,function(m,o,idx){
+      var binary = idx>0 && !OPS.test(shown[idx-1]);
+      var sym = o==='-' ? '−' : o;
+      return binary ? '<span class="o">'+sym+'</span>' : sym;
+    });
+    var n=shown.length;
+    main.className='main'+(n>14?' xs':n>9?' sm':'');
+    var h=hintText;
+    if(!err && !done && /.[+\-×÷%]/.test(expr)){
+      try{ var s=clean(expr); if(s){ var p=fmt(calc(s)); if(p!==expr) h='= '+p.replace(/-/g,'−'); } }catch(e){}
+    }
+    hint.textContent=h;
+  }
+
+  document.getElementById('pad').addEventListener('click',function(e){
+    var b=e.target.closest('button'); if(b) press(b.getAttribute('data-k'));
+  });
+  document.addEventListener('keydown',function(e){
+    if(e.ctrlKey||e.metaKey||e.altKey) return;
+    var k=e.key, map={'*':'×','/':'÷','Enter':'=','Backspace':'BS','Escape':'AC','Delete':'AC'};
+    if(map[k]) k=map[k];
+    if(/^[\d.+\-×÷=%]$/.test(k)||k==='BS'||k==='AC'){
+      e.preventDefault();
+      if(e.target.tagName==='BUTTON' && e.key==='Enter') return;
+      press(k);
+    }
+  });
+  render();
+})();
+</script>
+</body>
+</html>

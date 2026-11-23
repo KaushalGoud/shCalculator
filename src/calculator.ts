@@ -44,7 +44,8 @@ const ERROR_MESSAGE = 'Error';
 
 type Token =
   | { type: 'number'; value: number }
-  | { type: 'operator'; value: Operator };
+  | { type: 'operator'; value: Operator }
+  | { type: 'percent' };
 
 function isDigit(char: string): boolean {
   return char >= '0' && char <= '9';
@@ -124,6 +125,12 @@ function tokenize(expression: string): Token[] | null {
       }
 
       tokens.push({ type: 'number', value });
+
+      while (expression.charAt(index) === '%') {
+        tokens.push({ type: 'percent' });
+        index += 1;
+      }
+
       continue;
     }
 
@@ -134,12 +141,13 @@ function tokenize(expression: string): Token[] | null {
 }
 
 function evaluateExpression(expression: string): number {
-  const tokens = tokenize(expression);
+  const parsedTokens = tokenize(expression);
 
-  if (!tokens || tokens.length === 0) {
+  if (!parsedTokens || parsedTokens.length === 0) {
     return Number.NaN;
   }
 
+  const tokens = parsedTokens;
   let position = 0;
 
   function peek(): Token | undefined {
@@ -162,8 +170,50 @@ function evaluateExpression(expression: string): number {
     return token.value;
   }
 
-  function parseTerm(): number {
+  function parsePercentifiedNumber(): number {
     let value = parseNumber();
+
+    while (Number.isFinite(value) && peek()?.type === 'percent') {
+      next();
+      value /= 100;
+    }
+
+    return value;
+  }
+
+  function simplePercentLength(start: number): number | null {
+    const first = tokens[start];
+
+    if (!first || first.type !== 'number') {
+      return null;
+    }
+
+    let index = start + 1;
+    let count = 0;
+
+    while (tokens[index]?.type === 'percent') {
+      count += 1;
+      index += 1;
+    }
+
+    if (count === 0) {
+      return null;
+    }
+
+    const following = tokens[index];
+
+    if (
+      !following ||
+      (following.type === 'operator' && (following.value === '+' || following.value === '−'))
+    ) {
+      return index - start;
+    }
+
+    return null;
+  }
+
+  function parseTerm(): number {
+    let value = parsePercentifiedNumber();
 
     while (Number.isFinite(value)) {
       const token = peek();
@@ -173,7 +223,7 @@ function evaluateExpression(expression: string): number {
       }
 
       next();
-      const right = parseNumber();
+      const right = parsePercentifiedNumber();
 
       if (!Number.isFinite(right)) {
         return Number.NaN;
@@ -204,7 +254,23 @@ function evaluateExpression(expression: string): number {
       }
 
       next();
-      const right = parseTerm();
+      const percentLength = simplePercentLength(position);
+      let right: number;
+
+      if (percentLength !== null) {
+        const numberToken = tokens[position];
+        position += 1;
+        right = numberToken && numberToken.type === 'number' ? numberToken.value : Number.NaN;
+
+        while (Number.isFinite(right) && peek()?.type === 'percent') {
+          next();
+          right /= 100;
+        }
+
+        right *= value;
+      } else {
+        right = parseTerm();
+      }
 
       if (!Number.isFinite(right)) {
         return Number.NaN;
@@ -223,12 +289,6 @@ function evaluateExpression(expression: string): number {
   }
 
   return result;
-}
-
-function operatorBeforeCurrentInput(state: CalculatorState): Operator | null {
-  const prefixLength = state.expression.length - state.display.length;
-  const char = state.expression.charAt(prefixLength - 1);
-  return isOperator(char) ? char : null;
 }
 
 function getLastOperation(expression: string): { operator: Operator; operand: string } | null {
@@ -258,6 +318,29 @@ function replaceCurrentInput(state: CalculatorState, display: string): string {
   return state.expression.slice(0, prefixLength) + display;
 }
 
+function currentInputFromExpression(expression: string): string {
+  let end = expression.length;
+
+  while (end > 0) {
+    const char = expression.charAt(end - 1);
+
+    if (isDigit(char) || char === '.' || char === '%' || char === '-') {
+      end -= 1;
+      continue;
+    }
+
+    break;
+  }
+
+  const input = expression.slice(end);
+
+  if (input === '-') {
+    return '-0';
+  }
+
+  return input || '0';
+}
+
 function errorState(): CalculatorState {
   return {
     ...initialCalculatorState,
@@ -265,6 +348,10 @@ function errorState(): CalculatorState {
     hasError: true,
     waitingForNewInput: true,
   };
+}
+
+function hasPendingPercent(display: string): boolean {
+  return display.endsWith('%');
 }
 
 function inputDigit(state: CalculatorState, digit: string): CalculatorState {
@@ -279,6 +366,10 @@ function inputDigit(state: CalculatorState, digit: string): CalculatorState {
       expression: state.expression + digit,
       waitingForNewInput: false,
     };
+  }
+
+  if (hasPendingPercent(state.display)) {
+    return { ...state, display: digit, expression: replaceCurrentInput(state, digit) };
   }
 
   if (state.display === '0') {
@@ -314,8 +405,16 @@ function inputDecimal(state: CalculatorState): CalculatorState {
     };
   }
 
+  if (hasPendingPercent(state.display)) {
+    return { ...state, display: '0.', expression: replaceCurrentInput(state, '0.') };
+  }
+
   if (state.display.includes('.')) {
     return state;
+  }
+
+  if (!state.expression) {
+    return { ...state, display: '0.', expression: '0.', waitingForNewInput: false };
   }
 
   const display = `${state.display}.`;
@@ -336,7 +435,23 @@ function selectOperator(state: CalculatorState, operator: Operator): CalculatorS
   }
 
   if (!expression) {
-    expression = state.display;
+    if (operator === '−') {
+      return {
+        ...state,
+        display: '-0',
+        expression: '-',
+        showResult: false,
+        waitingForNewInput: false,
+      };
+    }
+
+    return {
+      ...state,
+      display: '0',
+      expression: '',
+      showResult: false,
+      waitingForNewInput: false,
+    };
   }
 
   return {
@@ -384,41 +499,17 @@ function equals(state: CalculatorState): CalculatorState {
 }
 
 function backspace(state: CalculatorState): CalculatorState {
-  if (state.hasError) {
+  if (state.hasError || state.showResult) {
     return initialCalculatorState;
   }
 
-  if (state.showResult) {
-    const display = state.display.slice(0, -1) || '0';
-
-    return {
-      ...state,
-      display,
-      expression: display === '0' ? '' : display,
-      showResult: false,
-      waitingForNewInput: false,
-    };
-  }
-
-  if (state.waitingForNewInput && isOperator(state.expression.charAt(state.expression.length - 1))) {
-    return {
-      ...state,
-      expression: state.expression.slice(0, -1),
-      waitingForNewInput: false,
-    };
-  }
-
-  let display = state.display.slice(0, -1);
-
-  if (display === '' || display === '-' || display === '-0') {
-    display = '0';
-  }
+  const expression = state.expression.slice(0, -1);
 
   return {
     ...state,
-    display,
-    expression: replaceCurrentInput(state, display),
-    waitingForNewInput: false,
+    expression,
+    display: currentInputFromExpression(expression),
+    waitingForNewInput: isOperator(expression.charAt(expression.length - 1)),
   };
 }
 
@@ -439,6 +530,10 @@ function toggleSign(state: CalculatorState): CalculatorState {
     };
   }
 
+  if (!state.showResult && !/[\d.]+$/.test(state.expression)) {
+    return state;
+  }
+
   const display = state.display.startsWith('-')
     ? state.display.slice(1)
     : `-${state.display}`;
@@ -447,7 +542,7 @@ function toggleSign(state: CalculatorState): CalculatorState {
     ...state,
     display,
     expression: state.showResult ? display : replaceCurrentInput(state, display),
-    showResult: false,
+    showResult: state.showResult,
     waitingForNewInput: false,
   };
 }
@@ -457,31 +552,24 @@ function percent(state: CalculatorState): CalculatorState {
     return initialCalculatorState;
   }
 
-  const current = Number(state.display);
+  const baseExpression = state.showResult ? state.display : state.expression;
+  const last = baseExpression.charAt(baseExpression.length - 1);
 
-  if (!Number.isFinite(current)) {
-    return errorState();
+  if (!/[0-9%]/.test(last)) {
+    return state;
   }
 
-  const prefixLength = state.expression.length - state.display.length;
-  const prefix = state.showResult ? '' : state.expression.slice(0, prefixLength);
-  const pendingOperator = state.showResult ? null : operatorBeforeCurrentInput(state);
-  let value = current / 100;
-
-  if (pendingOperator === '+' || pendingOperator === '−') {
-    const left = evaluateExpression(prefix.slice(0, -1));
-
-    if (Number.isFinite(left)) {
-      value *= left;
-    }
+  if (hasPendingPercent(state.display)) {
+    return state;
   }
 
-  const display = formatNumber(value);
+  const current = state.showResult ? state.display : currentInputFromExpression(state.expression);
+  const display = `${current}%`;
 
   return {
     ...state,
     display,
-    expression: state.showResult ? display : prefix + display,
+    expression: baseExpression + '%',
     showResult: false,
     waitingForNewInput: false,
   };

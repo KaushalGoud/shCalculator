@@ -5,7 +5,7 @@ import {
 import { Jost_300Light } from '@expo-google-fonts/jost';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
-import { useReducer } from 'react';
+import { useEffect, useReducer } from 'react';
 import { Image, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -31,16 +31,19 @@ type KeyConfig = {
   top: number;
   width: number;
   height: number;
+  fontSizeRatio?: number;
+  useSystemFont?: boolean;
 };
 
 const columnLefts = [9.624, 31.103, 52.817, 74.178];
-const rowTops = [45.125, 54.063, 62.73, 71.289];
+const rowTops = [45.125, 54.063, 62.73, 71.289, 79.632];
 const keyWidth = 17.136;
 const keyHeight = 6.988;
+const bottomKeyHeight = 6.88;
 
 const keys: KeyConfig[] = [
   { label: 'AC', accessibilityLabel: 'All clear', variant: 'utility', action: { type: 'clear' }, left: columnLefts[0], top: rowTops[0], width: keyWidth, height: keyHeight },
-  { label: '+/−', accessibilityLabel: 'Toggle sign', variant: 'utility', action: { type: 'sign' }, left: columnLefts[1], top: rowTops[0], width: keyWidth, height: keyHeight },
+  { label: '⌫', accessibilityLabel: 'Backspace', variant: 'utility', action: { type: 'backspace' }, left: columnLefts[1], top: rowTops[0], width: keyWidth, height: keyHeight, fontSizeRatio: 0.046, useSystemFont: true },
   { label: '%', accessibilityLabel: 'Percent', variant: 'utility', action: { type: 'percent' }, left: columnLefts[2], top: rowTops[0], width: keyWidth, height: keyHeight },
   { label: '÷', accessibilityLabel: 'Divide', variant: 'operator', action: { type: 'operator', value: '÷' }, left: columnLefts[3], top: rowTops[0], width: keyWidth, height: keyHeight },
   { label: '7', accessibilityLabel: 'Seven', variant: 'number', action: { type: 'digit', value: '7' }, left: columnLefts[0], top: rowTops[1], width: keyWidth, height: keyHeight },
@@ -55,9 +58,10 @@ const keys: KeyConfig[] = [
   { label: '2', accessibilityLabel: 'Two', variant: 'number', action: { type: 'digit', value: '2' }, left: columnLefts[1], top: rowTops[3], width: keyWidth, height: keyHeight },
   { label: '3', accessibilityLabel: 'Three', variant: 'number', action: { type: 'digit', value: '3' }, left: columnLefts[2], top: rowTops[3], width: keyWidth, height: keyHeight },
   { label: '+', accessibilityLabel: 'Add', variant: 'operator', action: { type: 'operator', value: '+' }, left: columnLefts[3], top: rowTops[3], width: keyWidth, height: keyHeight },
-  { label: '0', accessibilityLabel: 'Zero', variant: 'number', action: { type: 'digit', value: '0' }, left: 8.92, top: 79.632, width: 39.906, height: 6.88 },
-  { label: '·', accessibilityLabel: 'Decimal point', variant: 'number', action: { type: 'decimal' }, left: columnLefts[2], top: 79.632, width: keyWidth, height: 6.88 },
-  { label: '=', accessibilityLabel: 'Equals', variant: 'equals', action: { type: 'equals' }, left: 73.474, top: 79.632, width: 18.779, height: 6.88 },
+  { label: '±', accessibilityLabel: 'Toggle sign', variant: 'utility', action: { type: 'sign' }, left: columnLefts[0], top: rowTops[4], width: keyWidth, height: bottomKeyHeight },
+  { label: '0', accessibilityLabel: 'Zero', variant: 'number', action: { type: 'digit', value: '0' }, left: columnLefts[1], top: rowTops[4], width: keyWidth, height: bottomKeyHeight },
+  { label: '.', accessibilityLabel: 'Decimal point', variant: 'number', action: { type: 'decimal' }, left: columnLefts[2], top: rowTops[4], width: keyWidth, height: bottomKeyHeight },
+  { label: '=', accessibilityLabel: 'Equals', variant: 'equals', action: { type: 'equals' }, left: columnLefts[3], top: rowTops[4], width: keyWidth, height: bottomKeyHeight },
 ];
 
 const activeOperatorLabels: Record<string, string> = {
@@ -115,6 +119,22 @@ function CalculatorScreen() {
     Jost_300Light,
   });
 
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Backspace') {
+        event.preventDefault();
+        dispatch({ type: 'backspace' });
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [dispatch]);
+
   const safeWidth = Math.max(width - insets.left - insets.right, 1);
   const safeHeight = Math.max(height - insets.top - insets.bottom, 1);
   const canvasWidth = Math.min(safeWidth, safeHeight * CANVAS_RATIO);
@@ -169,7 +189,7 @@ function CalculatorScreen() {
                   fontSize: expressionFontSize,
                   lineHeight: expressionFontSize * 1.1,
                   right: canvasWidth * 0.055,
-                  top: canvasHeight * 0.244,
+                  top: canvasHeight * 0.236,
                   width: canvasWidth * 0.89,
                 },
               ]}
@@ -190,7 +210,7 @@ function CalculatorScreen() {
                 fontSize: mainFontSize,
                 lineHeight: mainFontSize * 1.05,
                 right: canvasWidth * 0.055,
-                top: canvasHeight * 0.296,
+                top: canvasHeight * 0.283,
                 width: canvasWidth * 0.89,
               },
             ]}
@@ -212,8 +232,8 @@ function CalculatorScreen() {
               top={(key.top / 100) * canvasHeight}
               width={(key.width / 100) * canvasWidth}
               height={(key.height / 100) * canvasHeight}
-              fontSize={keyFontSize(key.variant, canvasWidth)}
-              fontFamily={fontsLoaded ? 'Jost_300Light' : undefined}
+              fontSize={key.fontSizeRatio ? canvasWidth * key.fontSizeRatio : keyFontSize(key.variant, canvasWidth)}
+              fontFamily={key.useSystemFont ? undefined : fontsLoaded ? 'Jost_300Light' : undefined}
               active={key.label === activeLabel}
               onPress={() => dispatch(key.action)}
             />
